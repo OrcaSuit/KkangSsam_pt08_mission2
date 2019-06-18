@@ -19,6 +19,7 @@ import android.Manifest;
 import android.util.Log;
 import android.view.animation.Interpolator;
 import android.view.animation.LinearInterpolator;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.location.LocationListener;
@@ -50,10 +51,14 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     Location location;
     LatLng latLng;
 
+    TextView addressTextView;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        addressTextView=(TextView)findViewById(R.id.mission1_address);
 
         apiClient = new GoogleApiClient.Builder(this)
                 .addApi(LocationServices.API)
@@ -88,14 +93,15 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         map.setOnCameraMoveListener(new GoogleMap.OnCameraMoveListener() {
             @Override
             public void onCameraMove() {
-                int zoom=(int)map.getCameraPosition().zoom;
-                /*String center=map.getCameraPosition().target.latitude+":"+
-                        map.getCameraPosition().target.longitude;*/
+                map.clear();
                 LatLng center = map.getCameraPosition().target;
 
                 MarkerOptions markerOptions = new MarkerOptions();
                 markerOptions.icon(BitmapDescriptorFactory.fromResource(R.drawable.ic_start));
                 markerOptions.position(center);
+                animateMarker(map.addMarker(markerOptions),center,false);
+                latLng=center;
+
 
             }
         });
@@ -109,13 +115,15 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
                 MarkerOptions markerOptions = new MarkerOptions();
                 markerOptions.icon(BitmapDescriptorFactory.fromResource(R.drawable.ic_start));
                 markerOptions.position(center);
+                animateMarker(map.addMarker(markerOptions),center,false);
 
-                map.addMarker(markerOptions);
+                latLng=center;
+                MyGeocodingThread thread = new MyGeocodingThread(latLng);
+                thread.start();
             }
         });
 
-        MyGeocodingThread thread = new MyGeocodingThread(latLng);
-        thread.start();
+
     }
 
 
@@ -166,6 +174,8 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
                 case 100: {
                     Toast toast = Toast.makeText(MainActivity.this, (String)msg.obj, Toast.LENGTH_SHORT);
                     toast.show();
+
+                    addressTextView.setText((String)msg.obj);
                     break;
                 }
             }
@@ -214,6 +224,41 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     @Override
     public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
 
+    }
+
+    public void animateMarker(final Marker marker, final LatLng toPosition,
+                              final boolean hideMarker) {
+        final Handler handler = new Handler();
+        final long start = SystemClock.uptimeMillis();
+        Projection proj = map.getProjection();
+        Point startPoint = proj.toScreenLocation(marker.getPosition());
+        final LatLng startLatLng = proj.fromScreenLocation(startPoint);
+        final long duration = 50;
+        final Interpolator interpolator = new LinearInterpolator();
+        handler.post(new Runnable() {
+            @Override
+            public void run() {
+                long elapsed = SystemClock.uptimeMillis() - start;
+                float t = interpolator.getInterpolation((float) elapsed
+                        / duration);
+                double lng = t * toPosition.longitude + (1 - t)
+                        * startLatLng.longitude;
+                double lat = t * toPosition.latitude + (1 - t)
+                        * startLatLng.latitude;
+                marker.setPosition(new LatLng(lat, lng));
+                //marker.position(new LatLng(lat, lng));
+                if (t < 1.0) {
+                    // Post again 16ms later.
+                    handler.postDelayed(this, 16);
+                } else {
+                    if (hideMarker) {
+                        marker.setVisible(false);
+                    } else {
+                        marker.setVisible(true);
+                    }
+                }
+            }
+        });
     }
 
 
